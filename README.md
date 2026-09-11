@@ -11,7 +11,11 @@ A fast, lightweight desktop media player for Windows. Sub-5MB. Completely offlin
 [![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%202-24C8D8?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
 [![Rust](https://img.shields.io/badge/backend-Rust-DEA584?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![React](https://img.shields.io/badge/frontend-React%2019-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
-[![Installer Size](https://img.shields.io/badge/installer%20size-~1.5%20MB-brightgreen?style=flat-square)](https://github.com)
+[![Installer Size](https://img.shields.io/badge/installer%20size-~1.5%20MB-brightgreen?style=flat-square)](https://github.com/truongnm1/meedia/releases)
+
+<br /><br />
+
+<img src="Capture.PNG" width="850" alt="MEEDIA Screenshot" />
 
 </div>
 
