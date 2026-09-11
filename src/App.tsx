@@ -18,6 +18,35 @@ import { EmptyState } from './components/EmptyState';
 import { initAudioAnalyzer, resumeAudioContext, setMasterVolume, resetAudioAnalyzer } from './utils/audioAnalyzer';
 import { recordTrackPlay, calculateMyMix } from './utils/myMixEngine';
 
+interface SavedPlaybackState {
+  track: MediaItem;
+  currentTime: number;
+  duration: number;
+  folderPath: string;
+  rootPath: string;
+  repeatMode: RepeatMode;
+  isShuffle: boolean;
+  coverArt?: string | null;
+  savedAt: number;
+}
+
+const STORAGE_KEY_PLAYBACK = 'meedia_last_playback_state';
+
+const getInitialPlaybackState = (): SavedPlaybackState | null => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_PLAYBACK);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SavedPlaybackState;
+    const savedRoot = localStorage.getItem('meedia_root_folder');
+    if (parsed && parsed.track && parsed.rootPath && parsed.rootPath === savedRoot) {
+      return parsed;
+    }
+  } catch (e) {
+    console.warn('Failed to parse saved playback state:', e);
+  }
+  return null;
+};
+
 const EMPTY_BREADCRUMBS: BreadcrumbItem[] = [];
 const EMPTY_SUBDIRS: FolderItem[] = [];
 const EMPTY_MEDIA: MediaItem[] = [];
@@ -33,12 +62,20 @@ export function App() {
     localStorage.setItem('meedia_theme', theme);
   }, [theme]);
 
+  // Initial Restored Playback Snapshot
+  const initialPlaybackRef = useRef<SavedPlaybackState | null>(getInitialPlaybackState());
+  const pendingRestoreTimeRef = useRef<number | null>(
+    initialPlaybackRef.current && initialPlaybackRef.current.currentTime > 0
+      ? initialPlaybackRef.current.currentTime
+      : null
+  );
+
   // Navigation & Directory State
   const [rootPath, setRootPath] = useState<string | null>(() => {
     return localStorage.getItem('meedia_root_folder');
   });
   const [currentPath, setCurrentPath] = useState<string | null>(() => {
-    return localStorage.getItem('meedia_root_folder');
+    return initialPlaybackRef.current?.folderPath || localStorage.getItem('meedia_root_folder');
   });
   const [directoryData, setDirectoryData] = useState<DirectoryContent | null>(null);
   const [isLoadingDir, setIsLoadingDir] = useState<boolean>(false);
@@ -48,38 +85,73 @@ export function App() {
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
 
-  // Playback State
-  const [currentTrack, setCurrentTrack] = useState<MediaItem | null>(null);
+  // Playback State (restores paused at exact saved timestamp on startup)
+  const [currentTrack, setCurrentTrack] = useState<MediaItem | null>(() => {
+    return initialPlaybackRef.current?.track || null;
+  });
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [currentTime, setCurrentTime] = useState<number>(0);
-  const [duration, setDuration] = useState<number>(0);
+  const [currentTime, setCurrentTime] = useState<number>(() => {
+    return typeof initialPlaybackRef.current?.currentTime === 'number'
+      ? initialPlaybackRef.current.currentTime
+      : 0;
+  });
+  const [duration, setDuration] = useState<number>(() => {
+    return typeof initialPlaybackRef.current?.duration === 'number'
+      ? initialPlaybackRef.current.duration
+      : 0;
+  });
   const [volume, setVolume] = useState<number>(() => {
     const saved = localStorage.getItem('meedia_volume');
     return saved ? parseFloat(saved) : 0.8;
   });
-  const [isShuffle, setIsShuffle] = useState<boolean>(false);
-  const [repeatMode, setRepeatMode] = useState<RepeatMode>('off');
+  const [isShuffle, setIsShuffle] = useState<boolean>(() => {
+    return typeof initialPlaybackRef.current?.isShuffle === 'boolean'
+      ? initialPlaybackRef.current.isShuffle
+      : false;
+  });
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>(() => {
+    return initialPlaybackRef.current?.repeatMode || 'off';
+  });
 
   // Metadata Tags Modal State
   const [activeTags, setActiveTags] = useState<MediaTags | null>(null);
   const [isTagModalOpen, setIsTagModalOpen] = useState<boolean>(false);
   const [isLoadingTags, setIsLoadingTags] = useState<boolean>(false);
-  const [coverArt, setCoverArt] = useState<string | null>(null);
+  const [coverArt, setCoverArt] = useState<string | null>(() => {
+    return (
+      initialPlaybackRef.current?.coverArt ||
+      initialPlaybackRef.current?.track?.cover_art ||
+      null
+    );
+  });
 
   // Close / Exit to Tray Prompt State
   const [isClosePromptOpen, setIsClosePromptOpen] = useState<boolean>(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const currentTrackRef = useRef<MediaItem | null>(null);
+  const currentTrackRef = useRef<MediaItem | null>(currentTrack);
   const isPlayingRef = useRef<boolean>(false);
-  const repeatModeRef = useRef<RepeatMode>('off');
-  const isShuffleRef = useRef<boolean>(false);
-  const activePlaylistRef = useRef<MediaItem[]>([]);
+  const repeatModeRef = useRef<RepeatMode>(repeatMode);
+  const isShuffleRef = useRef<boolean>(isShuffle);
+  const activePlaylistRef = useRef<MediaItem[]>(
+    initialPlaybackRef.current?.track ? [initialPlaybackRef.current.track] : []
+  );
   const allLibraryTracksRef = useRef<MediaItem[]>([]);
   const currentPathRef = useRef<string | null>(currentPath);
   const historyRef = useRef<string[]>([]);
   const historyIndexRef = useRef<number>(-1);
   const hasRecordedCurrentPlayRef = useRef<boolean>(false);
+  const lastSavedTimeRef = useRef<number>(0);
+
+  const rootPathRef = useRef<string | null>(rootPath);
+  useEffect(() => {
+    rootPathRef.current = rootPath;
+  }, [rootPath]);
+
+  const coverArtRef = useRef<string | null>(coverArt);
+  useEffect(() => {
+    coverArtRef.current = coverArt;
+  }, [coverArt]);
 
   useEffect(() => {
     currentPathRef.current = currentPath;
@@ -101,12 +173,12 @@ export function App() {
     isShuffleRef.current = isShuffle;
   }, [isShuffle]);
 
-  const currentTimeRef = useRef<number>(0);
+  const currentTimeRef = useRef<number>(currentTime);
   useEffect(() => {
     currentTimeRef.current = currentTime;
   }, [currentTime]);
 
-  const durationRef = useRef<number>(0);
+  const durationRef = useRef<number>(duration);
   useEffect(() => {
     durationRef.current = duration;
   }, [duration]);
@@ -121,11 +193,49 @@ export function App() {
     isClosePromptOpenRef.current = isClosePromptOpen;
   }, [isClosePromptOpen]);
 
+  // Centralized playback state persistence
+  const savePlaybackState = useCallback((override?: Partial<SavedPlaybackState>) => {
+    const track = override?.track || currentTrackRef.current;
+    const root = override?.rootPath || rootPathRef.current;
+    if (!track || !root) return;
+
+    const time = typeof override?.currentTime === 'number' ? override.currentTime : currentTimeRef.current;
+    const dur = typeof override?.duration === 'number' ? override.duration : durationRef.current;
+    const folder = override?.folderPath || currentPathRef.current || root;
+    const repeat = override?.repeatMode || repeatModeRef.current;
+    const shuffle = typeof override?.isShuffle === 'boolean' ? override.isShuffle : isShuffleRef.current;
+    const art = override?.coverArt !== undefined ? override.coverArt : coverArtRef.current;
+
+    const stateToSave: SavedPlaybackState = {
+      track,
+      currentTime: Math.max(0, Math.round(time * 10) / 10),
+      duration: Math.max(0, Math.round(dur * 10) / 10),
+      folderPath: folder,
+      rootPath: root,
+      repeatMode: repeat,
+      isShuffle: shuffle,
+      coverArt: art,
+      savedAt: Date.now(),
+    };
+
+    try {
+      localStorage.setItem(STORAGE_KEY_PLAYBACK, JSON.stringify(stateToSave));
+    } catch (e) {
+      console.warn('Failed to save playback state to localStorage:', e);
+    }
+  }, []);
+
   useEffect(() => {
     if (audioRef.current) {
       initAudioAnalyzer(audioRef.current);
       setMasterVolume(volume);
       audioRef.current.volume = 1.0;
+
+      // Pre-prime audio track if restored on startup
+      if (initialPlaybackRef.current?.track && initialPlaybackRef.current.track.media_type === 'audio') {
+        const streamUrl = convertFileSrc(initialPlaybackRef.current.track.path, 'stream');
+        audioRef.current.src = streamUrl;
+      }
     }
   }, []);
 
@@ -261,6 +371,19 @@ export function App() {
       processCoverQueue();
     });
   }, []);
+
+  // Pre-load cover art for restored track on startup if missing
+  useEffect(() => {
+    const saved = initialPlaybackRef.current;
+    if (saved?.track && !saved.coverArt && !saved.track.cover_art) {
+      loadTrackCoverArt(saved.track).then((art) => {
+        if (art) {
+          setCoverArt(art);
+          savePlaybackState({ coverArt: art });
+        }
+      });
+    }
+  }, [loadTrackCoverArt, savePlaybackState]);
 
   const hoverPrefetchTimeoutRef = useRef<number | null>(null);
 
@@ -406,6 +529,15 @@ export function App() {
       setCurrentPath(folderPath);
       setIsLoadingDir(false);
 
+      if (
+        cached.media_files &&
+        cached.media_files.length > 0 &&
+        currentTrackRef.current &&
+        cached.media_files.some((f) => f.path === currentTrackRef.current?.path)
+      ) {
+        activePlaylistRef.current = cached.media_files;
+      }
+
       if (addToHistory) {
         recordHistory(folderPath);
       }
@@ -443,6 +575,15 @@ export function App() {
       setDirectoryData(data);
       setCurrentPath(folderPath);
 
+      if (
+        data.media_files &&
+        data.media_files.length > 0 &&
+        currentTrackRef.current &&
+        data.media_files.some((f) => f.path === currentTrackRef.current?.path)
+      ) {
+        activePlaylistRef.current = data.media_files;
+      }
+
       if (addToHistory) {
         recordHistory(folderPath);
       }
@@ -451,16 +592,29 @@ export function App() {
       if (folderPath === root) {
         setRootPath(null);
         localStorage.removeItem('meedia_root_folder');
+      } else {
+        loadDirectory(root, root, true);
       }
     } finally {
       setIsLoadingDir(false);
     }
   };
 
-  // Initial load
+  // Initial load: opens directly into the saved subfolder or falls back to rootPath
+  const initialLoadDoneRef = useRef<boolean>(false);
   useEffect(() => {
     if (rootPath) {
-      loadDirectory(rootPath, rootPath, true);
+      if (!initialLoadDoneRef.current) {
+        initialLoadDoneRef.current = true;
+        const initialFolder = initialPlaybackRef.current?.folderPath || rootPath;
+        loadDirectory(initialFolder, rootPath, true).catch(() => {
+          if (initialFolder !== rootPath) {
+            loadDirectory(rootPath, rootPath, true);
+          }
+        });
+      } else {
+        loadDirectory(rootPath, rootPath, true);
+      }
     }
   }, [rootPath]);
 
@@ -469,6 +623,21 @@ export function App() {
     try {
       const selected = await invoke<string | null>('select_root_folder');
       if (selected) {
+        localStorage.removeItem(STORAGE_KEY_PLAYBACK);
+        setCurrentTrack(null);
+        currentTrackRef.current = null;
+        setCurrentTime(0);
+        currentTimeRef.current = 0;
+        setDuration(0);
+        durationRef.current = 0;
+        setCoverArt(null);
+        coverArtRef.current = null;
+        pendingRestoreTimeRef.current = null;
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.removeAttribute('src');
+          audioRef.current.load();
+        }
         blobUrlCacheRef.current.forEach((url) => {
           try {
             URL.revokeObjectURL(url);
@@ -532,6 +701,9 @@ export function App() {
       });
       setActiveTags(tags);
       setCoverArt(tags.cover_art || null);
+      if (tags.cover_art) {
+        savePlaybackState({ coverArt: tags.cover_art });
+      }
     } catch (err) {
       console.error('Failed to extract media tags:', err);
       setActiveTags(null);
@@ -562,6 +734,7 @@ export function App() {
   const handlePlayTrack = async (track: MediaItem, customPlaylist?: MediaItem[]) => {
     // Reset listening session marker (will only record after >= 30s of actual continuous playback)
     hasRecordedCurrentPlayRef.current = false;
+    pendingRestoreTimeRef.current = null;
     const listToUse =
       customPlaylist && customPlaylist.length > 0
         ? customPlaylist
@@ -582,6 +755,14 @@ export function App() {
     isPlayingRef.current = true;
     setIsPlaying(true);
     setCurrentTime(0);
+
+    savePlaybackState({
+      track,
+      currentTime: 0,
+      duration: 0,
+      coverArt: track.cover_art || null,
+      folderPath: currentPathRef.current || rootPath || '',
+    });
 
     if (track.media_type === 'video') {
       if (audioRef.current) {
@@ -685,8 +866,10 @@ export function App() {
 
     if (track.media_type === 'video') {
       setIsPlaying((prev) => {
-        isPlayingRef.current = !prev;
-        return !prev;
+        const next = !prev;
+        isPlayingRef.current = next;
+        savePlaybackState({ currentTime: currentTimeRef.current });
+        return next;
       });
       return;
     }
@@ -703,15 +886,23 @@ export function App() {
     }
 
     if (audio.paused) {
+      if (pendingRestoreTimeRef.current !== null && pendingRestoreTimeRef.current > 0) {
+        try {
+          audio.currentTime = pendingRestoreTimeRef.current;
+        } catch {}
+        pendingRestoreTimeRef.current = null;
+      }
       isPlayingRef.current = true;
       setIsPlaying(true);
       audio.play().catch((err) => {
         console.warn('Audio play notice:', err);
       });
+      savePlaybackState({ currentTime: audio.currentTime });
     } else {
       isPlayingRef.current = false;
       setIsPlaying(false);
       audio.pause();
+      savePlaybackState({ currentTime: audio.currentTime });
     }
   };
 
@@ -808,6 +999,7 @@ export function App() {
       const vid = document.querySelector<HTMLVideoElement>('video');
       if (vid) vid.currentTime = clampedTime;
     }
+    savePlaybackState({ currentTime: clampedTime });
   };
 
   // Volume
@@ -840,18 +1032,34 @@ export function App() {
     if (!audio) return;
 
     const onTimeUpdate = () => {
-      setCurrentTime(audio.currentTime);
+      const cur = audio.currentTime;
+      setCurrentTime(cur);
       consecutiveErrorCountRef.current = 0;
-      checkAndRecordTrackPlay(audio.currentTime, audio.duration || durationRef.current);
+      checkAndRecordTrackPlay(cur, audio.duration || durationRef.current);
+
+      // Throttled persistence every 2 seconds
+      const now = Date.now();
+      if (now - lastSavedTimeRef.current >= 2000) {
+        lastSavedTimeRef.current = now;
+        savePlaybackState({ currentTime: cur, duration: audio.duration || durationRef.current });
+      }
     };
     const onLoadedMetadata = () => {
       setDuration(audio.duration);
+      if (pendingRestoreTimeRef.current !== null && pendingRestoreTimeRef.current > 0) {
+        audio.currentTime = pendingRestoreTimeRef.current;
+        pendingRestoreTimeRef.current = null;
+      }
       if (isPlayingRef.current && audio.paused) {
         resumeAudioContext();
         audio.play().catch(() => {});
       }
     };
     const onCanPlay = () => {
+      if (pendingRestoreTimeRef.current !== null && pendingRestoreTimeRef.current > 0) {
+        audio.currentTime = pendingRestoreTimeRef.current;
+        pendingRestoreTimeRef.current = null;
+      }
       if (isPlayingRef.current && audio.paused) {
         resumeAudioContext();
         audio.play().catch(() => {});
@@ -878,7 +1086,9 @@ export function App() {
     const onError = () => {
       if (currentTrackRef.current?.media_type === 'audio' && audio.currentSrc) {
         console.warn('Audio element error notice:', audio.error);
-        handleSkipMissingFile(currentTrackRef.current.path);
+        if (isPlayingRef.current) {
+          handleSkipMissingFile(currentTrackRef.current.path);
+        }
       }
     };
 
@@ -1007,6 +1217,7 @@ export function App() {
   }, []);
 
   const handleExitToTray = async () => {
+    savePlaybackState();
     setIsClosePromptOpen(false);
     try {
       await invoke('hide_to_tray');
@@ -1016,6 +1227,7 @@ export function App() {
   };
 
   const handleExitApp = async () => {
+    savePlaybackState();
     setIsClosePromptOpen(false);
     try {
       await invoke('exit_app');
@@ -1023,6 +1235,19 @@ export function App() {
       console.error('Failed to exit app:', err);
     }
   };
+
+  // Immediate persistence on window unload / refresh / app terminate
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      savePlaybackState();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handleBeforeUnload);
+    };
+  }, [savePlaybackState]);
 
   // Listen for tray playback menu actions (Play/Pause, Next, Previous)
   useEffect(() => {
@@ -1282,13 +1507,17 @@ export function App() {
             volume={volume}
             onVolumeChange={handleVolumeChange}
             isShuffle={isShuffle}
-            onToggleShuffle={() => setIsShuffle(!isShuffle)}
+            onToggleShuffle={() => {
+              const next = !isShuffle;
+              setIsShuffle(next);
+              savePlaybackState({ isShuffle: next });
+            }}
             repeatMode={repeatMode}
             onCycleRepeat={() => {
               setRepeatMode((prev) => {
-                if (prev === 'off') return 'all';
-                if (prev === 'all') return 'one';
-                return 'off';
+                const next = prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off';
+                savePlaybackState({ repeatMode: next });
+                return next;
               });
             }}
             coverArt={coverArt}
@@ -1301,6 +1530,11 @@ export function App() {
               setCurrentTime(t);
               consecutiveErrorCountRef.current = 0;
               checkAndRecordTrackPlay(t, durationRef.current);
+              const now = Date.now();
+              if (now - lastSavedTimeRef.current >= 2000) {
+                lastSavedTimeRef.current = now;
+                savePlaybackState({ currentTime: t, duration: durationRef.current });
+              }
             }}
             onVideoLoadedMetadata={(d) => {
               setDuration(d);
@@ -1315,7 +1549,9 @@ export function App() {
             }}
             onVideoError={() => {
               if (currentTrackRef.current?.media_type === 'video') {
-                handleSkipMissingFile(currentTrackRef.current.path);
+                if (isPlayingRef.current) {
+                  handleSkipMissingFile(currentTrackRef.current.path);
+                }
               }
             }}
             onOpenTagDetails={() => handleInspectTags()}

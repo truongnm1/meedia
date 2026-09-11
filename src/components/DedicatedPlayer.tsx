@@ -728,6 +728,9 @@ export const DedicatedPlayer: React.FC<DedicatedPlayerProps> = ({
             }}
             onLoadedMetadata={(e) => {
               onVideoLoadedMetadata?.(e.currentTarget.duration);
+              if (currentTimeRef.current > 0 && e.currentTarget.currentTime === 0) {
+                e.currentTarget.currentTime = currentTimeRef.current;
+              }
               if (e.currentTarget.videoWidth && e.currentTarget.videoHeight) {
                 setVideoResolution({
                   width: e.currentTarget.videoWidth,

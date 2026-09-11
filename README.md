@@ -77,7 +77,7 @@ Pre-built binaries are available under [Releases](https://github.com/truongnm1/m
 
 ### Development
 ```powershell
-git clone https://github.com/<your-username>/meedia.git
+git clone https://github.com/truongnm1/meedia.git
 cd meedia
 npm install
 npm run tauri dev
@@ -98,6 +98,7 @@ MEEDIA makes zero network connections. Settings are saved strictly on your local
 - Master volume level
 - Dark / Light theme preference
 - Rolling 14-day local playback history for My Mix
+- Last played track, folder, and exact timestamp to resume playback seamlessly across restarts
 
 ---
 
