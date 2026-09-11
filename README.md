@@ -19,7 +19,7 @@ A fast, lightweight desktop media player for Windows. Sub-5MB. Completely offlin
 
 ## Downloads
 
-Pre-built binaries are available under [Releases](https://github.com):
+Pre-built binaries are available under [Releases](https://github.com/truongnm1/meedia/releases):
 
 | Package | Format | Size | Notes |
 | :--- | :--- | :--- | :--- |
