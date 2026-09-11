@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en" style="background-color: #0c0c0c;">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate icon" href="/favicon.ico" />
+    <title>MEEDIA</title>
+    <style>
+      html, body, #root {
+        background-color: #0c0c0c !important;
+        color: #ffffff;
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+
+      /* Eliminate white screen flash during HTML5 fullscreen transitions */
+      *::backdrop,
+      *::-webkit-backdrop,
+      :fullscreen,
+      ::backdrop,
+      :fullscreen::backdrop {
+        background-color: #000000 !important;
+        background: #000000 !important;
+      }
+
+      [data-video-container="true"]:fullscreen,
+      [data-video-container="true"]:fullscreen video {
+        background-color: #000000 !important;
+        background: #000000 !important;
+      }
+
+      [data-video-container="true"].hide-cursor,
+      [data-video-container="true"].hide-cursor * {
+        cursor: none !important;
+      }
+    </style>
+    <script>
+      // Disable default Chromium/WebView context menu (right click)
+      document.addEventListener('contextmenu', (e) => e.preventDefault(), { capture: true });
+
+      // Disable hotkeys that can open DevTools or View Source
+      window.addEventListener('keydown', (e) => {
+        const key = e.key;
+        const code = e.code;
+        const keyCode = e.keyCode || e.which;
+        const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+        const isShift = e.shiftKey;
+        const isAlt = e.altKey;
+
+        // F12 key
+        if (key === 'F12' || code === 'F12' || keyCode === 123) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }
+
+        // Ctrl+Shift+I / J / C / K / E or Cmd+Option+I / J / C
+        if (isCtrlOrMeta && (isShift || isAlt) && ['I', 'i', 'J', 'j', 'C', 'c', 'K', 'k', 'E', 'e'].includes(key)) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }
+
+        // Ctrl+U / Cmd+U (View Page Source)
+        if (isCtrlOrMeta && (key === 'U' || key === 'u' || code === 'KeyU' || keyCode === 85)) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }
+
+        // Shift+F10 (Context menu accelerator)
+        if (isShift && (key === 'F10' || code === 'F10' || keyCode === 121)) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }
+      }, { capture: true });
+    </script>
+  </head>
+
+  <body oncontextmenu="return false;" style="background-color: #0c0c0c; margin: 0; padding: 0;">
+    <div id="root" style="background-color: #0c0c0c;"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
