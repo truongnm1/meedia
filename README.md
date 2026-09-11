@@ -93,12 +93,14 @@ Compiled installers are generated in `src-tauri/target/release/bundle/msi/` and 
 
 ## Privacy & Local Storage
 
-MEEDIA makes zero network connections. Settings are saved strictly on your local machine using WebView2 `localStorage`:
+MEEDIA makes zero network connections. Settings and playback state are saved strictly on your local machine using Windows WebView2 `localStorage` located at `%LOCALAPPDATA%\com.meedia.player`:
 - Selected root folder path
 - Master volume level
 - Dark / Light theme preference
 - Rolling 14-day local playback history for My Mix
 - Last played track, folder, and exact timestamp to resume playback seamlessly across restarts
+
+**Clean Reset**: Because Windows preserves user settings across reinstalls by default, you can do a 100% fresh factory reset anytime by deleting the `%LOCALAPPDATA%\com.meedia.player` folder.
 
 ---
 
